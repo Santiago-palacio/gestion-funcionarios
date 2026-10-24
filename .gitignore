@@ -1,0 +1,27 @@
+# Archivos de compilacion y dependencias
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Archivos de configuracion con credenciales locales privadas
+config.properties
+db.properties
+*.local.properties
+
+# Logs
+*.log
+
+# IDEs y editores locales
+.vscode/
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+
+# Archivos temporales del sistema
+Thumbs.db
+.DS_Store
+classpath.txt

@@ -1,0 +1,9 @@
+# ==============================================================
+# ARCHIVO DE CONFIGURACION DE EJEMPLO PARA BASE DE DATOS
+# Copia este archivo como 'config.properties' en la carpeta:
+# c:\Users\USUARIO\Desktop\Proyecto_Gestion_Funcionarios\gestion-funcionarios\
+# o en la raiz del proyecto y define tus credenciales reales.
+# ==============================================================
+db.url=jdbc:mysql://localhost:3306/gestion_funcionarios?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Bogota
+db.user=root
+db.password=TU_CONTRASENA_AQUI
