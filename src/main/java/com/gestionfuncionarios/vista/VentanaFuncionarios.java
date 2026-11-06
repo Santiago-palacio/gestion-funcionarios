@@ -9,6 +9,11 @@ import com.gestionfuncionarios.dao.GrupoFamiliarDAOImpl;
 import com.gestionfuncionarios.modelo.Estudio;
 import com.gestionfuncionarios.modelo.Funcionario;
 import com.gestionfuncionarios.modelo.GrupoFamiliar;
+import com.gestionfuncionarios.modelo.Rol;
+import com.gestionfuncionarios.modelo.Usuario;
+import com.gestionfuncionarios.seguridad.AccesoDenegadoException;
+import com.gestionfuncionarios.seguridad.ControlAcceso;
+import com.gestionfuncionarios.seguridad.SesionUsuario;
 
 import javax.swing.*;
 import javax.swing.border.CompoundBorder;
@@ -69,6 +74,7 @@ public class VentanaFuncionarios extends JFrame {
 
     // Barra de Estado
     private JLabel lblEstado;
+    private JButton btnGestionUsuarios;
 
     public VentanaFuncionarios() {
         this.funcionarioDAO = new FuncionarioDAOImpl();
@@ -77,6 +83,7 @@ public class VentanaFuncionarios extends JFrame {
 
         configurarLook();
         inicializarComponentes();
+        aplicarPermisosRol();
         cargarTablaFuncionarios();
     }
 
@@ -125,6 +132,9 @@ public class VentanaFuncionarios extends JFrame {
         panel.setBackground(new Color(24, 43, 73));
         panel.setBorder(new EmptyBorder(12, 20, 12, 20));
 
+        JPanel panelTextos = new JPanel(new GridLayout(2, 1, 0, 4));
+        panelTextos.setOpaque(false);
+
         JLabel lblTitulo = new JLabel("GESTION INSTITUCIONAL DE FUNCIONARIOS");
         lblTitulo.setFont(new Font("Segoe UI", Font.BOLD, 18));
         lblTitulo.setForeground(Color.WHITE);
@@ -133,8 +143,50 @@ public class VentanaFuncionarios extends JFrame {
         lblSubtitulo.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         lblSubtitulo.setForeground(new Color(190, 210, 240));
 
-        panel.add(lblTitulo, BorderLayout.NORTH);
-        panel.add(lblSubtitulo, BorderLayout.SOUTH);
+        panelTextos.add(lblTitulo);
+        panelTextos.add(lblSubtitulo);
+        panel.add(panelTextos, BorderLayout.WEST);
+
+        // Panel de Usuario y Cierre de Sesion
+        JPanel panelSesion = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
+        panelSesion.setOpaque(false);
+
+        Usuario usuarioActual = SesionUsuario.getInstancia().getUsuarioActual();
+        String nombreUser = (usuarioActual != null) ? usuarioActual.getUsername() : "Invitado";
+        String rolUser = (usuarioActual != null && usuarioActual.getRol() != null) ? usuarioActual.getRol().getNombre() : "CONSULTA";
+
+        JLabel lblBadge = new JLabel(" Usuario: " + nombreUser + "  |  Rol: " + rolUser + " ");
+        lblBadge.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        lblBadge.setOpaque(true);
+        if ("ADMINISTRADOR".equalsIgnoreCase(rolUser)) {
+            lblBadge.setBackground(new Color(33, 115, 70));
+            lblBadge.setForeground(Color.WHITE);
+        } else {
+            lblBadge.setBackground(new Color(180, 120, 30));
+            lblBadge.setForeground(Color.WHITE);
+        }
+        lblBadge.setBorder(new EmptyBorder(4, 8, 4, 8));
+
+        JButton btnCerrarSesion = new JButton("Cerrar Sesión");
+        btnCerrarSesion.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        btnCerrarSesion.setBackground(new Color(160, 40, 40));
+        btnCerrarSesion.setForeground(Color.WHITE);
+        btnCerrarSesion.setFocusPainted(false);
+        btnCerrarSesion.addActionListener(e -> accionCerrarSesion());
+
+        btnGestionUsuarios = new JButton("Gestión de Usuarios");
+        btnGestionUsuarios.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        btnGestionUsuarios.setBackground(new Color(40, 95, 160));
+        btnGestionUsuarios.setForeground(Color.WHITE);
+        btnGestionUsuarios.setFocusPainted(false);
+        btnGestionUsuarios.addActionListener(e -> accionAbrirGestionUsuarios());
+        btnGestionUsuarios.setVisible(ControlAcceso.tienePermisoEscritura());
+
+        panelSesion.add(lblBadge);
+        panelSesion.add(btnGestionUsuarios);
+        panelSesion.add(btnCerrarSesion);
+        panel.add(panelSesion, BorderLayout.EAST);
+
         return panel;
     }
 
@@ -361,7 +413,7 @@ public class VentanaFuncionarios extends JFrame {
 
         tblFamiliares.getSelectionModel().addListSelectionListener(e -> {
             boolean haySeleccion = tblFamiliares.getSelectedRow() != -1;
-            btnEliminarFamiliar.setEnabled(haySeleccion);
+            btnEliminarFamiliar.setEnabled(haySeleccion && ControlAcceso.tienePermisoEscritura());
         });
 
         panel.add(barraAcciones, BorderLayout.NORTH);
@@ -397,7 +449,7 @@ public class VentanaFuncionarios extends JFrame {
 
         tblEstudios.getSelectionModel().addListSelectionListener(e -> {
             boolean haySeleccion = tblEstudios.getSelectedRow() != -1;
-            btnEliminarEstudio.setEnabled(haySeleccion);
+            btnEliminarEstudio.setEnabled(haySeleccion && ControlAcceso.tienePermisoEscritura());
         });
 
         panel.add(barraAcciones, BorderLayout.NORTH);
@@ -420,6 +472,83 @@ public class VentanaFuncionarios extends JFrame {
         panel.add(lblInfo, BorderLayout.EAST);
 
         return panel;
+    }
+
+    // ==============================================================
+    // CONTROL DE ACCESO Y SESION
+    // ==============================================================
+
+    /**
+     * Aplica las restricciones visuales segun el rol del usuario autenticado.
+     * Nivel 1 de defensa en profundidad (complementado por ControlAcceso en la logica).
+     */
+    private void aplicarPermisosRol() {
+        boolean esAdmin = ControlAcceso.tienePermisoEscritura();
+
+        // Botones de escritura: solo habilitados para ADMINISTRADOR
+        btnGuardar.setEnabled(esAdmin);
+        btnActualizar.setEnabled(false); // se habilita al seleccionar fila
+        btnEliminar.setEnabled(false);   // se habilita al seleccionar fila
+        btnAgregarFamiliar.setEnabled(false);
+        btnAgregarEstudio.setEnabled(false);
+
+        // Tooltip informativo para rol CONSULTA
+        if (!esAdmin) {
+            String tooltipMsg = "Accion no disponible para el rol CONSULTA";
+            btnGuardar.setToolTipText(tooltipMsg);
+            btnActualizar.setToolTipText(tooltipMsg);
+            btnEliminar.setToolTipText(tooltipMsg);
+            btnAgregarFamiliar.setToolTipText(tooltipMsg);
+            btnEliminarFamiliar.setToolTipText(tooltipMsg);
+            btnAgregarEstudio.setToolTipText(tooltipMsg);
+            btnEliminarEstudio.setToolTipText(tooltipMsg);
+        }
+
+        if (btnGestionUsuarios != null) {
+            btnGestionUsuarios.setVisible(esAdmin);
+        }
+
+        String username = SesionUsuario.getInstancia().getUsernameActual();
+        String rol = SesionUsuario.getInstancia().getRolActual() != null
+                ? SesionUsuario.getInstancia().getRolActual().getNombre() : "SIN ROL";
+        lblEstado.setText("Sesion activa: " + username + " | Rol: " + rol
+                + (esAdmin ? " | Acceso: COMPLETO" : " | Acceso: SOLO LECTURA"));
+    }
+
+    /**
+     * Cierra la sesion del usuario activo y regresa al formulario de inicio de sesion.
+     */
+    private void accionCerrarSesion() {
+        int confirmacion = JOptionPane.showConfirmDialog(
+                this,
+                "¿Esta seguro de que desea cerrar la sesion actual?",
+                "Cerrar Sesion",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE
+        );
+
+        if (confirmacion == JOptionPane.YES_OPTION) {
+            SesionUsuario.getInstancia().cerrarSesion();
+            this.dispose();
+
+            SwingUtilities.invokeLater(() -> {
+                VentanaLogin login = new VentanaLogin();
+                login.setVisible(true);
+            });
+        }
+    }
+
+    /**
+     * Abre el modulo de Gestion de Usuarios. Protegido en la logica de negocio (solo ADMINISTRADOR).
+     */
+    private void accionAbrirGestionUsuarios() {
+        try {
+            ControlAcceso.validarPermisoEscritura("Acceder a Gestion de Usuarios");
+            VentanaGestionUsuarios ventana = new VentanaGestionUsuarios(this);
+            ventana.setVisible(true);
+        } catch (AccesoDenegadoException e) {
+            mostrarError("Acceso Denegado", e.getMessage());
+        }
     }
 
     // ==============================================================
@@ -488,10 +617,10 @@ public class VentanaFuncionarios extends JFrame {
         txtFechaNac.setText("null".equals(fechaNac) ? "" : fechaNac);
 
         btnGuardar.setEnabled(false);
-        btnActualizar.setEnabled(true);
-        btnEliminar.setEnabled(true);
-        btnAgregarFamiliar.setEnabled(true);
-        btnAgregarEstudio.setEnabled(true);
+        btnActualizar.setEnabled(ControlAcceso.tienePermisoEscritura());
+        btnEliminar.setEnabled(ControlAcceso.tienePermisoEscritura());
+        btnAgregarFamiliar.setEnabled(ControlAcceso.tienePermisoEscritura());
+        btnAgregarEstudio.setEnabled(ControlAcceso.tienePermisoEscritura());
 
         if (id != null) {
             cargarRelaciones(id);
@@ -545,6 +674,14 @@ public class VentanaFuncionarios extends JFrame {
     }
 
     private void accionGuardar() {
+        // NIVEL 2: Verificacion de permisos en la logica de negocio (independiente de la UI)
+        try {
+            ControlAcceso.validarPermisoEscritura("Registrar Funcionario");
+        } catch (AccesoDenegadoException e) {
+            mostrarAdvertencia("Acceso Denegado", e.getMessage());
+            return;
+        }
+
         String tipoDoc = (String) cbTipoDoc.getSelectedItem();
         String numDoc = txtNumDoc.getText();
         String nombres = txtNombres.getText();
@@ -591,6 +728,14 @@ public class VentanaFuncionarios extends JFrame {
     }
 
     private void accionActualizar() {
+        // NIVEL 2: Verificacion de permisos en la logica de negocio
+        try {
+            ControlAcceso.validarPermisoEscritura("Actualizar Funcionario");
+        } catch (AccesoDenegadoException e) {
+            mostrarAdvertencia("Acceso Denegado", e.getMessage());
+            return;
+        }
+
         String idTexto = txtId.getText();
         if (idTexto == null || idTexto.trim().isEmpty()) {
             mostrarAdvertencia("Seleccion Requerida", "Debe seleccionar un funcionario de la tabla para actualizar.");
@@ -650,6 +795,14 @@ public class VentanaFuncionarios extends JFrame {
     }
 
     private void accionEliminar() {
+        // NIVEL 2: Verificacion de permisos en la logica de negocio
+        try {
+            ControlAcceso.validarPermisoEscritura("Eliminar Funcionario");
+        } catch (AccesoDenegadoException e) {
+            mostrarAdvertencia("Acceso Denegado", e.getMessage());
+            return;
+        }
+
         String idTexto = txtId.getText();
         if (idTexto == null || idTexto.trim().isEmpty()) {
             mostrarAdvertencia("Seleccion Requerida", "Debe seleccionar un funcionario de la tabla para eliminar.");
@@ -718,10 +871,10 @@ public class VentanaFuncionarios extends JFrame {
                 txtFechaNac.setText(f.getFechaNacimiento() != null ? f.getFechaNacimiento().toString() : "");
 
                 btnGuardar.setEnabled(false);
-                btnActualizar.setEnabled(true);
-                btnEliminar.setEnabled(true);
-                btnAgregarFamiliar.setEnabled(true);
-                btnAgregarEstudio.setEnabled(true);
+                btnActualizar.setEnabled(ControlAcceso.tienePermisoEscritura());
+                btnEliminar.setEnabled(ControlAcceso.tienePermisoEscritura());
+                btnAgregarFamiliar.setEnabled(ControlAcceso.tienePermisoEscritura());
+                btnAgregarEstudio.setEnabled(ControlAcceso.tienePermisoEscritura());
 
                 cargarRelaciones(f.getIdFuncionario());
                 lblEstado.setText("Funcionario encontrado: " + f.getNombreCompleto());
@@ -758,7 +911,7 @@ public class VentanaFuncionarios extends JFrame {
         txtFechaNac.setText("");
 
         tblFuncionarios.clearSelection();
-        btnGuardar.setEnabled(true);
+        btnGuardar.setEnabled(ControlAcceso.tienePermisoEscritura());
         btnActualizar.setEnabled(false);
         btnEliminar.setEnabled(false);
         btnAgregarFamiliar.setEnabled(false);
@@ -774,6 +927,12 @@ public class VentanaFuncionarios extends JFrame {
     // ==============================================================
 
     private void agregarFamiliarModal() {
+        try {
+            ControlAcceso.validarPermisoEscritura("Agregar Familiar");
+        } catch (AccesoDenegadoException e) {
+            mostrarAdvertencia("Acceso Denegado", e.getMessage());
+            return;
+        }
         String idTexto = txtId.getText();
         if (idTexto == null || idTexto.trim().isEmpty()) return;
         int idFuncionario;
@@ -829,6 +988,12 @@ public class VentanaFuncionarios extends JFrame {
     }
 
     private void eliminarFamiliarSeleccionado() {
+        try {
+            ControlAcceso.validarPermisoEscritura("Eliminar Familiar");
+        } catch (AccesoDenegadoException e) {
+            mostrarAdvertencia("Acceso Denegado", e.getMessage());
+            return;
+        }
         int fila = tblFamiliares.getSelectedRow();
         if (fila == -1) return;
 
@@ -858,6 +1023,12 @@ public class VentanaFuncionarios extends JFrame {
     }
 
     private void agregarEstudioModal() {
+        try {
+            ControlAcceso.validarPermisoEscritura("Agregar Estudio");
+        } catch (AccesoDenegadoException e) {
+            mostrarAdvertencia("Acceso Denegado", e.getMessage());
+            return;
+        }
         String idTexto = txtId.getText();
         if (idTexto == null || idTexto.trim().isEmpty()) return;
         int idFuncionario;
@@ -907,6 +1078,12 @@ public class VentanaFuncionarios extends JFrame {
     }
 
     private void eliminarEstudioSeleccionado() {
+        try {
+            ControlAcceso.validarPermisoEscritura("Eliminar Estudio");
+        } catch (AccesoDenegadoException e) {
+            mostrarAdvertencia("Acceso Denegado", e.getMessage());
+            return;
+        }
         int fila = tblEstudios.getSelectedRow();
         if (fila == -1) return;
 
